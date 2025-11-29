@@ -7,12 +7,6 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
-type UserClaims struct {
-	ID    string
-	Email string
-	Name  string
-}
-
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
 	e.Use(middleware.Logger())
@@ -26,16 +20,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		MaxAge:           300,
 	}))
 	e.Use(JWTMiddleware)
-
-	e.GET("/api/me", func(c echo.Context) error {
-		user := c.Get("user").(*UserClaims)
-
-		return c.JSON(200, echo.Map{
-			"user_id": user.ID,
-			"name":    user.Name,
-			"email":   user.Email,
-		})
-	})
+	v1 := e.Group("/v1")
+	{
+		s.addAirtableEndPoint(v1)
+	}
 
 	return e
 }

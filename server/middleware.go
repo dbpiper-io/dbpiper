@@ -60,11 +60,7 @@ func JWTMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		_ = token.Get("name", &name)
 
 		// Save in Echo context
-		c.Set("user", &UserClaims{
-			ID:    sub,
-			Email: email,
-			Name:  name,
-		})
+    c.Set("user_id", sub)
 
 		return next(c)
 	}

@@ -1,13 +1,15 @@
 package database
 
 import (
-	"dbpiper/internal/database/models"
+	"context"
+	"dbpiper/database/models"
 	"fmt"
 	"log"
 	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
@@ -16,6 +18,7 @@ import (
 // Service represents a service that interacts with a database.
 type DB interface {
 	WithTx(fn func(tx DB) error) error
+	UpsertAirtableConnection(ctx context.Context, conn *models.AirtableConnection) error
 }
 
 type service struct {
@@ -44,11 +47,8 @@ func New() DB {
 		log.Fatal(err)
 	}
 	err = db.AutoMigrate(
-    &models.AirtableConnection{},
-		&models.DatabaseConnection{},
-		&models.Sync{},
-		&models.SyncLog{},
-		&models.WebhookQueue{})
+		&models.AirtableConnection{},
+	)
 
 	if err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
@@ -63,4 +63,18 @@ func (s *service) WithTx(fn func(tx DB) error) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		return fn(&service{db: tx})
 	})
+}
+
+func (s *service) UpsertAirtableConnection(ctx context.Context, conn *models.AirtableConnection) error {
+	return s.db.WithContext(ctx).Model(&models.AirtableConnection{}).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"provider_account_id": conn.ProviderAccountID,
+			"access_token":        conn.AccessToken,
+			"refresh_token":       conn.RefreshToken,
+			"scope":               conn.Scope,
+			"token_type":          conn.TokenType,
+			"expires_at":          conn.ExpiresAt,
+			"updated_at":          conn.UpdatedAt,
+		})}).Create(conn).Error
 }

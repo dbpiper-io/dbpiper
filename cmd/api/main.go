@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"dbpiper/internal/server"
+	"dbpiper/server"
 )
 
 func gracefulShutdown(apiServer *http.Server, done chan bool) {

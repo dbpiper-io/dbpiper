@@ -21,6 +21,7 @@ type OAuthService struct {
 	ClientSecret string
 	AuthURL      string
 	TokenURL     string
+	CallbackURI  string
 	RedirectURI  string
 }
 
@@ -32,7 +33,8 @@ func New(db database.DB) *OAuthService {
 		ClientSecret: os.Getenv("AIRTABLE_CLIENT_SECRET"),
 		AuthURL:      os.Getenv("AIRTABLE_AUTHORIZE_URL"),
 		TokenURL:     os.Getenv("AIRTABLE_TOKEN_URL"),
-		RedirectURI:  strings.TrimRight(base, "/") + "/api/v1/airtable/oauth/callback",
+		CallbackURI:  strings.TrimRight(base, "/") + "/api/v1/airtable/oauth/callback",
+		RedirectURI:  strings.TrimRight(base, "/") + "/connections",
 	}
 }
 
@@ -50,7 +52,7 @@ func (o *OAuthService) ConnectHandler(c echo.Context) error {
 	}
 
 	challenge := codeChallengeFromVerifier(verifier)
-	fmt.Println(o.RedirectURI)
+	fmt.Println(o.CallbackURI)
 
 	// State (signed)
 	state, err := signState(userID, verifier, 5*time.Minute)
@@ -61,7 +63,7 @@ func (o *OAuthService) ConnectHandler(c echo.Context) error {
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", o.ClientID)
-	q.Set("redirect_uri", o.RedirectURI)
+	q.Set("redirect_uri", o.CallbackURI)
 	q.Set("scope",
 		strings.Join([]string{
 			"data.records:read",
@@ -105,7 +107,7 @@ func (o *OAuthService) CallbackHandler(c echo.Context) error {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
-	form.Set("redirect_uri", o.RedirectURI)
+	form.Set("redirect_uri", o.CallbackURI)
 	form.Set("client_id", o.ClientID)
 	form.Set("code_verifier", codeVerifier)
 
@@ -143,12 +145,17 @@ func (o *OAuthService) CallbackHandler(c echo.Context) error {
 	}
 
 	conn := models.AirtableConnection{
-		UserID: userID,
+		CreatedAt:      time.Now(),
+		ConnectionType: models.OAuth,
+		UserID:         userID,
 		ProviderAccountID: sql.NullString{
 			String: tokenResp.AccountID,
 			Valid:  tokenResp.AccountID != "",
 		},
-		AccessToken: tokenResp.AccessToken,
+		AccessToken: sql.NullString{
+			String: tokenResp.AccessToken,
+			Valid:  tokenResp.AccessToken != "",
+		},
 		RefreshToken: sql.NullString{
 			String: tokenResp.RefreshToken,
 			Valid:  tokenResp.RefreshToken != "",
@@ -164,10 +171,19 @@ func (o *OAuthService) CallbackHandler(c echo.Context) error {
 		ExpiresAt: expires,
 	}
 
-	if err := o.DB.UpsertAirtableConnection(ctx, &conn); err != nil {
-		return c.JSON(500, echo.Map{"error": "db_error", "details": err.Error()})
+	client := NewClient(&conn, o.DB)
+	bases, err := client.GetBases(ctx)
+	if err != nil {
+		return c.JSON(http.StatusMethodNotAllowed, echo.Map{"error": "airtable_error", "details": err.Error()})
 	}
-	frontend := strings.TrimRight(os.Getenv("APP_BASE_URL"), "/")
+	if len(bases) == 0 || bases[0].ID == "" {
+		return c.JSON(http.StatusMethodNotAllowed, echo.Map{"error": "airtable_error", "details": "not data allowed"})
+	}
+	conn.BaseID = bases[0].ID
 
-	return c.Redirect(http.StatusFound, frontend+"/connections?connected=1")
+	if err := o.DB.UpsertAirtableConnection(ctx, &conn); err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
+	}
+
+	return c.Redirect(http.StatusSeeOther, o.RedirectURI)
 }

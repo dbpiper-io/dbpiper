@@ -2,23 +2,37 @@ package models
 
 import (
 	"database/sql"
-	"gorm.io/gorm"
 	"time"
 )
 
-type AirtableConnection struct {
-	ID        uint `gorm:"primaryKey"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt `gorm:"index"`
+type ConnectionType string
 
-	UserID            string `gorm:"uniqueIndex;not null"`
-	ProviderAccountID sql.NullString
-	AccessToken       string `gorm:"not null"`
-	RefreshToken      sql.NullString
-	Scope             sql.NullString
-	TokenType         sql.NullString
-	ExpiresAt         sql.NullTime
+const (
+	APIKey ConnectionType = "api_key"
+	OAuth  ConnectionType = "oauth"
+)
+
+type AirtableConnection struct {
+	ID uint `gorm:"primaryKey"`
+	// The user who owns this connection
+	UserID string `gorm:"uniqueIndex;not null"`
+
+	// "oauth" or "api_key"
+	ConnectionType ConnectionType `gorm:"type:varchar(20);not null"`
+
+	// --- OAuth fields ---
+	ProviderAccountID sql.NullString `gorm:"default:null"`
+	AccessToken       sql.NullString `gorm:"default:null"`
+	RefreshToken      sql.NullString `gorm:"default:null"`
+	Scope             sql.NullString `gorm:"default:null"`
+	TokenType         sql.NullString `gorm:"default:null"`
+	ExpiresAt         sql.NullTime   `gorm:"default:null"`
+
+	// --- API key fields ---
+	APIKey sql.NullString `gorm:"default:null"`
+	BaseID string `gorm:"default:null"`
+
+	CreatedAt time.Time
 }
 
 type DatabaseConnection struct {

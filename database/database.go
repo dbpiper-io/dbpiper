@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"dbpiper/database/models"
 	"fmt"
 	"log"
@@ -19,6 +20,8 @@ import (
 type DB interface {
 	WithTx(fn func(tx DB) error) error
 	UpsertAirtableConnection(ctx context.Context, conn *models.AirtableConnection) error
+	GetAirtableConnection(ctx context.Context, userID string) (*models.AirtableConnection, error)
+	DeleteAirtableConnection(ctx context.Context, userID, id string) error
 }
 
 type service struct {
@@ -66,15 +69,58 @@ func (s *service) WithTx(fn func(tx DB) error) error {
 }
 
 func (s *service) UpsertAirtableConnection(ctx context.Context, conn *models.AirtableConnection) error {
-	return s.db.WithContext(ctx).Model(&models.AirtableConnection{}).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"provider_account_id": conn.ProviderAccountID,
-			"access_token":        conn.AccessToken,
-			"refresh_token":       conn.RefreshToken,
-			"scope":               conn.Scope,
-			"token_type":          conn.TokenType,
-			"expires_at":          conn.ExpiresAt,
-			"updated_at":          conn.UpdatedAt,
-		})}).Create(conn).Error
+	// Build field updates depending on connection type
+	updates := map[string]any{
+		"user_id":         conn.UserID,
+		"connection_type": conn.ConnectionType,
+		"created_at":      conn.CreatedAt,
+		"base_id":         conn.BaseID,
+	}
+
+	if conn.ConnectionType == models.OAuth {
+		updates["provider_account_id"] = conn.ProviderAccountID
+		updates["access_token"] = conn.AccessToken
+		updates["refresh_token"] = conn.RefreshToken
+		updates["scope"] = conn.Scope
+		updates["token_type"] = conn.TokenType
+		updates["expires_at"] = conn.ExpiresAt
+
+		// CLEAR API key fields
+		updates["api_key"] = sql.NullString{}
+	}
+
+	if conn.ConnectionType == models.APIKey {
+		updates["api_key"] = conn.APIKey
+
+		// CLEAR OAuth fields
+		updates["provider_account_id"] = sql.NullString{}
+		updates["access_token"] = sql.NullString{}
+		updates["refresh_token"] = sql.NullString{}
+		updates["scope"] = sql.NullString{}
+		updates["token_type"] = sql.NullString{}
+		updates["expires_at"] = sql.NullTime{}
+	}
+	return s.db.WithContext(ctx).
+		Model(&models.AirtableConnection{}).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}},
+			DoUpdates: clause.Assignments(updates),
+		}).
+		Create(updates).
+		Error
+}
+
+func (s *service) GetAirtableConnection(ctx context.Context, userID string) (*models.AirtableConnection, error) {
+	var airtable models.AirtableConnection
+	if err := s.db.WithContext(ctx).
+		Model(&models.AirtableConnection{}).
+		Where("user_id = ?", userID).
+		First(&airtable).Error; err != nil {
+		return nil, err
+	}
+	return &airtable, nil
+}
+
+func (s *service) DeleteAirtableConnection(ctx context.Context, userID, id string) error {
+	return s.db.WithContext(ctx).Delete(&models.AirtableConnection{}, "id = ? AND user_id = ?", id, userID).Error
 }

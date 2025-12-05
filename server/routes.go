@@ -23,6 +23,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	v1 := e.Group("/v1")
 	{
 		s.addAirtableEndPoint(v1)
+		s.addConnectionEndPoint(v1)
 	}
 
 	return e

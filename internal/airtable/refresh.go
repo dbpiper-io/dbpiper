@@ -40,7 +40,7 @@ func (a *Airtable) refreshToken(ctx context.Context) error {
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(a.clientId, a.clientSecret)
+	req.SetBasicAuth(a.ClientID, a.ClientSecret)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -63,7 +63,6 @@ func (a *Airtable) refreshToken(ctx context.Context) error {
 	conn := models.AirtableConnection{
 		CreatedAt:      a.Conn.CreatedAt,
 		UserID:         a.Conn.UserID,
-		BaseID:         a.Conn.BaseID,
 		ConnectionType: models.OAuth,
 		AccessToken: sql.NullString{
 			String: r.AccessToken,
@@ -79,7 +78,7 @@ func (a *Airtable) refreshToken(ctx context.Context) error {
 		},
 	}
 
-	if err := a.DB.UpsertAirtableConnection(ctx, &conn); err != nil {
+	if err := (*a.DB).UpsertAirtableConnection(ctx, &conn); err != nil {
 		return err
 	}
 

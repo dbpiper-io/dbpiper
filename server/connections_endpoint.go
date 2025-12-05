@@ -2,6 +2,7 @@ package server
 
 import (
 	"dbpiper/internal/airtable"
+	"dbpiper/types"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -28,12 +29,12 @@ func (s *Server) listConnectionsHandler(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
 
-	client := airtable.NewClient(air, s.db)
+	client := airtable.New(&s.db, air)
 	bases, err := client.GetBases(ctx)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "airtable_error", "details": err.Error()})
+		return c.JSON(http.StatusBadGateway, echo.Map{"error": "Failed to get base data from airtable", "details": err.Error()})
 	}
-	var base airtable.Base
+	var base types.Base
 	for _, b := range bases {
 		if b.ID == air.BaseID {
 			base = b

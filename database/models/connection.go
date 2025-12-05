@@ -6,15 +6,21 @@ import (
 )
 
 type ConnectionType string
+type Engine string
 
 const (
 	APIKey ConnectionType = "api_key"
 	OAuth  ConnectionType = "oauth"
 )
 
+const (
+	Postgres Engine = "postgres"
+	Mysql    Engine = "mysql"
+	Mongodb  Engine = "mongodb"
+)
+
 type AirtableConnection struct {
 	ID uint `gorm:"primaryKey"`
-	// The user who owns this connection
 	UserID string `gorm:"uniqueIndex;not null"`
 
 	// "oauth" or "api_key"
@@ -30,24 +36,22 @@ type AirtableConnection struct {
 
 	// --- API key fields ---
 	APIKey sql.NullString `gorm:"default:null"`
-	BaseID string `gorm:"default:null"`
+	BaseID string         `gorm:"default:null"`
 
 	CreatedAt time.Time
 }
 
 type DatabaseConnection struct {
-	ID     int  `gorm:"primaryKey"`
-	UserID int  `gorm:"index"`
-	User   User `gorm:"constraint:OnDelete:CASCADE"`
+	ID     int    `gorm:"primaryKey"`
+	UserID string `gorm:"uniqueIndex;not null"`
 
-	Type         string // postgres, mysql, mongodb
+	Engine       Engine
 	Host         string
 	Port         int
 	DatabaseName string
 	Username     string
 	Password     string // encrypted
 	SSLEnabled   bool
-	SSLCert      string
 
-	CreatedAt time.Time `gorm:"autoCreateTime"`
+	CreatedAt time.Time
 }

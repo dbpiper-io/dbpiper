@@ -12,6 +12,12 @@ import (
 
 func (a *Airtable) doRequest(ctx context.Context, method, url string, body []byte, response any) error {
 	client := &http.Client{}
+	if a.DB == nil {
+		return fmt.Errorf("database required for this call")
+	}
+	if a.Conn == nil {
+		return fmt.Errorf("airtable required for this call")
+	}
 
 	if a.Conn.ConnectionType == models.OAuth && a.tokenExpired() {
 		if err := a.refreshToken(ctx); err != nil {

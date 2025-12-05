@@ -22,6 +22,8 @@ type DB interface {
 	UpsertAirtableConnection(ctx context.Context, conn *models.AirtableConnection) error
 	GetAirtableConnection(ctx context.Context, userID string) (*models.AirtableConnection, error)
 	DeleteAirtableConnection(ctx context.Context, userID, id string) error
+	CreateDatabaseConnection(ctx context.Context, db *models.DatabaseConnection) error
+	DeleteDatabaseConnection(ctx context.Context, userID, id string) error
 }
 
 type service struct {
@@ -51,6 +53,7 @@ func New() DB {
 	}
 	err = db.AutoMigrate(
 		&models.AirtableConnection{},
+		&models.DatabaseConnection{},
 	)
 
 	if err != nil {
@@ -123,4 +126,12 @@ func (s *service) GetAirtableConnection(ctx context.Context, userID string) (*mo
 
 func (s *service) DeleteAirtableConnection(ctx context.Context, userID, id string) error {
 	return s.db.WithContext(ctx).Delete(&models.AirtableConnection{}, "id = ? AND user_id = ?", id, userID).Error
+}
+
+func (s *service) CreateDatabaseConnection(ctx context.Context, db *models.DatabaseConnection) error {
+	return s.db.WithContext(ctx).Model(&models.DatabaseConnection{}).Create(db).Error
+}
+
+func (s *service) DeleteDatabaseConnection(ctx context.Context, userID, id string) error {
+	return s.db.WithContext(ctx).Delete(&models.DatabaseConnection{}, "id = ? AND user_id = ?", id, userID).Error
 }

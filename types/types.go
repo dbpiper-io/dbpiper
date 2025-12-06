@@ -32,11 +32,14 @@ type Table struct {
 }
 
 type DBConnectRequest struct {
-	Engine   string `json:"engine"`
+	Engine        string `json:"engine"`
+	ConnectionURL string `json:"connection_url"` // optional
+
 	Host     string `json:"host"`
-	Port     string    `json:"port"`
+	Port     string `json:"port"` // keep string
 	Database string `json:"database"`
 	Username string `json:"username"`
 	Password string `json:"password"`
-	UseSSL   bool   `json:"use_ssl"`
+
+	UseSSL bool `json:"use_ssl"`
 }

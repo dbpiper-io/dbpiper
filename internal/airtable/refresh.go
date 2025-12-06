@@ -63,6 +63,7 @@ func (a *Airtable) refreshToken(ctx context.Context) error {
 	conn := models.AirtableConnection{
 		CreatedAt:      a.Conn.CreatedAt,
 		UserID:         a.Conn.UserID,
+		BaseID:         a.Conn.BaseID,
 		ConnectionType: models.OAuth,
 		AccessToken: sql.NullString{
 			String: r.AccessToken,

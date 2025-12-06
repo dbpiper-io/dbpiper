@@ -24,6 +24,7 @@ type DB interface {
 	DeleteAirtableConnection(ctx context.Context, userID, id string) error
 	CreateDatabaseConnection(ctx context.Context, db *models.DatabaseConnection) error
 	DeleteDatabaseConnection(ctx context.Context, userID, id string) error
+	GetDatabaseConnection(ctx context.Context, userID string) ([]models.DatabaseConnection, error)
 }
 
 type service struct {
@@ -122,6 +123,17 @@ func (s *service) GetAirtableConnection(ctx context.Context, userID string) (*mo
 		return nil, err
 	}
 	return &airtable, nil
+}
+
+func (s *service) GetDatabaseConnection(ctx context.Context, userID string) ([]models.DatabaseConnection, error) {
+	var db []models.DatabaseConnection
+	if err := s.db.WithContext(ctx).
+		Model(&models.DatabaseConnection{}).
+		Where("user_id = ?", userID).
+		Find(&db).Error; err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func (s *service) DeleteAirtableConnection(ctx context.Context, userID, id string) error {

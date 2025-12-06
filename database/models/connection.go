@@ -14,14 +14,14 @@ const (
 )
 
 const (
-	Postgres Engine = "postgres"
+	Postgres Engine = "pgx"
 	Mysql    Engine = "mysql"
 	Mongodb  Engine = "mongodb"
 )
 
 type AirtableConnection struct {
-	ID uint `gorm:"primaryKey"`
-	UserID string `gorm:"uniqueIndex;not null"`
+	ID     uint   `gorm:"primaryKey"`
+	UserID string `gorm:"index;not null"`
 
 	// "oauth" or "api_key"
 	ConnectionType ConnectionType `gorm:"type:varchar(20);not null"`
@@ -45,13 +45,13 @@ type DatabaseConnection struct {
 	ID     int    `gorm:"primaryKey"`
 	UserID string `gorm:"uniqueIndex;not null"`
 
-	Engine       Engine
-	Host         string
-	Port         int
-	DatabaseName string
-	Username     string
-	Password     string // encrypted
-	SSLEnabled   bool
-
-	CreatedAt time.Time
+	Engine        Engine
+	Host          string
+	Port          int
+	DatabaseName  string
+	Username      string
+	Password      string // encrypted
+	SSLEnabled    bool
+	ConnectionURL sql.NullString `gorm:"default:null"`
+	CreatedAt     time.Time
 }

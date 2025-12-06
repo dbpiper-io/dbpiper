@@ -47,11 +47,23 @@ func (s *Server) callbackHandler(c echo.Context) error {
 	if code == "" || state == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "missing_code_or_state"})
 	}
-	air := airtable.New(nil, nil)
-	conn, err := air.OauthCallback(ctx, state, code)
+
+	air := airtable.New(&s.db, nil)
+  conn, err := air.OauthCallback(ctx, state, code)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": err.Error()})
 	}
+  
+  air.SetAirtableConnection(conn)
+  bases, err := air.GetBases(ctx)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": err.Error()})
+	}
+
+	if len(bases) == 0 || bases[0].ID == "" {
+    	return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": "no base allowed to access"})
+	}
+  conn.BaseID = bases[0].ID
 
 	if err := s.db.UpsertAirtableConnection(ctx, conn); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})

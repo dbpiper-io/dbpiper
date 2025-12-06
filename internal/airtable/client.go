@@ -28,6 +28,7 @@ type Client interface {
 	OauthCallback(ctx context.Context, state, code string) (*models.AirtableConnection, error)
 	CheckApiKey(ctx context.Context, baseID, apiKey string) error
 	GetRedirectURL() string
+  SetAirtableConnection(conn *models.AirtableConnection)
 }
 
 type Airtable struct {
@@ -76,6 +77,10 @@ func (a *Airtable) CheckApiKey(ctx context.Context, baseID, apiKey string) error
 
 func (a *Airtable) GetRedirectURL() string {
 	return a.RedirectURI
+}
+
+func (a *Airtable) SetAirtableConnection(conn *models.AirtableConnection) {
+  a.Conn = conn
 }
 
 func (a *Airtable) GetBases(ctx context.Context) ([]types.Base, error) {
@@ -173,19 +178,10 @@ func (c *Airtable) OauthCallback(ctx context.Context, state, code string) (*mode
 		}
 	}
 
-	bases, err := c.GetBases(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(bases) == 0 || bases[0].ID == "" {
-		return nil, fmt.Errorf("no base allowed to access")
-	}
-
 	conn := models.AirtableConnection{
 		CreatedAt:      time.Now(),
 		ConnectionType: models.OAuth,
 		UserID:         payload.UserID,
-		BaseID:         bases[0].ID,
 		ProviderAccountID: sql.NullString{
 			String: tokenResp.AccountID,
 			Valid:  tokenResp.AccountID != "",

@@ -40,7 +40,12 @@ func (s *Server) listConnectionsHandler(c echo.Context) error {
 			base = b
 		}
 	}
-	return c.JSON(http.StatusOK, echo.Map{
+	dbs, err := s.db.GetDatabaseConnection(ctx, userID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
+	}
+
+	response := echo.Map{
 		"airtable": map[string]any{
 			"id":              air.ID,
 			"connection_type": air.ConnectionType,
@@ -50,5 +55,18 @@ func (s *Server) listConnectionsHandler(c echo.Context) error {
 				"name": base.Name,
 			},
 		},
-	})
+	}
+
+	for _, db := range dbs {
+		response[string(db.Engine)] = map[string]any{
+			"id":         db.ID,
+			"database":   db.DatabaseName,
+			"host":       db.Host,
+			"username":   db.Username,
+			"created_at": db.CreatedAt,
+			"ssl":        db.SSLEnabled,
+		}
+	}
+
+	return c.JSON(http.StatusOK, response)
 }

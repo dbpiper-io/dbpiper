@@ -12,16 +12,19 @@ import (
 )
 
 func (s *Server) addAirtableEndPoint(g *echo.Group) {
-	air := g.Group("/airtable")
+	airtables := g.Group("/airtable")
 
-	oauth := air.Group("/oauth")
+	air := airtables.Group("/:id")
+	air.DELETE("", s.deleteAirtableConnectionHandler)
+	air.GET("/tables", s.getAirtableTables)
+
+	oauth := airtables.Group("/oauth")
 	oauth.GET("/connect", s.connectHandler)
 	oauth.GET("/callback", s.callbackHandler)
 
-	apikey := air.Group("/apikey")
+	apikey := airtables.Group("/apikey")
 	apikey.POST("/connect", s.apiKeyConnecter)
 
-	air.DELETE("/:id", s.deleteAirtableConnectionHandler)
 }
 
 func (s *Server) connectHandler(c echo.Context) error {
@@ -48,24 +51,24 @@ func (s *Server) callbackHandler(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "missing_code_or_state"})
 	}
 
-	air := airtable.New(&s.db, nil)
-  conn, err := air.OauthCallback(ctx, state, code)
+	air := airtable.New(&s.DB, nil)
+	conn, err := air.OauthCallback(ctx, state, code)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": err.Error()})
 	}
-  
-  air.SetAirtableConnection(conn)
-  bases, err := air.GetBases(ctx)
+
+	air.SetAirtableConnection(conn)
+	bases, err := air.GetBases(ctx)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": err.Error()})
 	}
 
 	if len(bases) == 0 || bases[0].ID == "" {
-    	return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": "no base allowed to access"})
+		return c.JSON(http.StatusBadGateway, echo.Map{"error": "airtable callback failed", "details": "no base allowed to access"})
 	}
-  conn.BaseID = bases[0].ID
+	conn.BaseID = bases[0].ID
 
-	if err := s.db.UpsertAirtableConnection(ctx, conn); err != nil {
+	if err := s.DB.UpsertAirtableConnection(ctx, conn); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
 
@@ -105,7 +108,7 @@ func (s *Server) apiKeyConnecter(c echo.Context) error {
 		BaseID:         req.BaseID,
 	}
 
-	if err := s.db.UpsertAirtableConnection(ctx, &conn); err != nil {
+	if err := s.DB.UpsertAirtableConnection(ctx, &conn); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
 
@@ -121,11 +124,37 @@ func (s *Server) deleteAirtableConnectionHandler(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "not_authenticated"})
 	}
 	id := c.Param("id")
-	if err := s.db.DeleteAirtableConnection(ctx, userID, id); err != nil {
+	if err := s.DB.DeleteAirtableConnection(ctx, userID, id); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{
 		"message": "Integration removed from our system. For complete removal, please also revoke access in your Airtable account",
+	})
+}
+
+func (s *Server) getAirtableTables(c echo.Context) error {
+	ctx := c.Request().Context()
+	connID := c.Param("id")
+
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "not_authenticated"})
+	}
+
+	air, err := s.DB.GetAirtableConnectionByID(ctx, userID, connID)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "connection not found", "details": err.Error()})
+	}
+	client := airtable.New(&s.DB, air)
+	tables, err := client.GetTables(ctx)
+	if err != nil {
+		return c.JSON(http.StatusMethodNotAllowed, echo.Map{"error": "airtable error", "details": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"id":     connID,
+		"driver": "airtable",
+		"tables": tables,
 	})
 }

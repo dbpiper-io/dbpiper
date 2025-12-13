@@ -3,33 +3,26 @@ package server
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 
 	"dbpiper/database"
+	"dbpiper/internal/databases/pgx"
 )
 
 type Server struct {
-	port int
-
-	db database.DB
+	Port    int
+	PgxPool *pgx.PoolManager
+	DB      database.DB
 }
 
-func NewServer() *http.Server {
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
-	NewServer := &Server{
-		port: port,
-
-		db: database.New(),
-	}
+func NewServer(serv *Server) *http.Server {
 
 	// Declare Server config
 	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", NewServer.port),
-		Handler:      NewServer.RegisterRoutes(),
+		Addr:         fmt.Sprintf(":%d", serv.Port),
+		Handler:      serv.RegisterRoutes(),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,

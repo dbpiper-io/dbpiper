@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"dbpiper/database"
+	"dbpiper/internal/databases/pgx"
 	"dbpiper/server"
 )
 
@@ -38,8 +42,17 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 }
 
 func main() {
+	port, _ := strconv.Atoi(os.Getenv("PORT"))
+  pgPool := pgx.New()
+  defer pgPool.Close()
 
-	server := server.NewServer()
+	serv := &server.Server{
+		Port: port,
+    PgxPool: pgPool,
+		DB: database.New(),
+	}
+	
+  server := server.NewServer(serv)
 
 	// Create a done channel to signal when the shutdown is complete
 	done := make(chan bool, 1)

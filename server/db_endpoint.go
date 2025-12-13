@@ -3,7 +3,7 @@ package server
 import (
 	"database/sql"
 	"dbpiper/database/models"
-	"dbpiper/internal/databases"
+	"dbpiper/internal/databases/pgx"
 	"dbpiper/types"
 	"net/http"
 	"net/url"
@@ -14,9 +14,14 @@ import (
 )
 
 func (s *Server) addDBConnectionEndPoint(g *echo.Group) {
-	conn := g.Group("/databases")
-	conn.POST("/connect", s.connectDatabase)
-	conn.DELETE("/:id", s.deleteDatabaseConnection)
+	conns := g.Group("/databases")
+	conns.POST("/connect", s.connectDatabase)
+	conns.DELETE("/:id", s.deleteDatabaseConnection)
+	conn := conns.Group("/:id")
+	tables := conn.Group("/tables")
+	tables.GET("", s.getTables)
+	table := tables.Group("/:table")
+	table.GET("/columns", s.GetTableColumns)
 }
 
 func (s *Server) connectDatabase(c echo.Context) error {
@@ -35,18 +40,19 @@ func (s *Server) connectDatabase(c echo.Context) error {
 	if req.Engine != string(models.Postgres) {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "unsupported database"})
 	}
-
-	dsn, err := databases.BuildPostgresDSN(req)
-	if err != nil {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid configuration", "details": err.Error()})
+	dsn := req.ConnectionURL
+	if dsn != "" {
+		dsn = pgx.BuildPostgresDSN(req.Username, req.Password, req.Host, req.Port, req.Database, req.UseSSL)
 	}
 
-	if err := databases.TestConnection(ctx, req.Engine, dsn); err != nil {
+	if err := pgx.TestConnection(ctx, req.Engine, dsn); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "failed to connect to database", "details": err.Error()})
 	}
 
 	var host, db, user, pass, port string
+	var sslEnabled bool
 	if req.ConnectionURL != "" {
+		sslEnabled = strings.Contains(req.ConnectionURL, "sslmode=require")
 		u, err := url.Parse(req.ConnectionURL)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid url", "details": err.Error()})
@@ -62,9 +68,12 @@ func (s *Server) connectDatabase(c echo.Context) error {
 		host = req.Host
 		port = req.Port
 		db = req.Database
+		sslEnabled = req.UseSSL
 	}
 
+	var err error
 	var portInt int
+
 	if port != "" {
 		portInt, err = strconv.Atoi(port)
 		if err != nil {
@@ -82,10 +91,10 @@ func (s *Server) connectDatabase(c echo.Context) error {
 		Username:      user,
 		Password:      pass,
 		ConnectionURL: sql.NullString{String: req.ConnectionURL, Valid: req.ConnectionURL != ""},
-		SSLEnabled:    databases.DetectSSL(req),
+		SSLEnabled:    sslEnabled,
 	}
 
-	if err := s.db.CreateDatabaseConnection(ctx, &conn); err != nil {
+	if err := s.DB.CreateDatabaseConnection(ctx, &conn); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "failed to save", "details": err.Error()})
 	}
 
@@ -94,14 +103,108 @@ func (s *Server) connectDatabase(c echo.Context) error {
 
 func (s *Server) deleteDatabaseConnection(c echo.Context) error {
 	ctx := c.Request().Context()
+	id := c.Param("id")
 	userID, ok := c.Get("user_id").(string)
 	if !ok || userID == "" {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "not authenticated"})
 	}
-	id := c.Param("id")
-	if err := s.db.DeleteDatabaseConnection(ctx, userID, id); err != nil {
+
+	if err := s.DB.DeleteDatabaseConnection(ctx, userID, id); err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{"message": "Database removed"})
+}
+
+func (s *Server) getTables(c echo.Context) error {
+	ctx := c.Request().Context()
+	connID := c.Param("id")
+
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "not_authenticated"})
+	}
+
+	db, err := s.DB.GetDatabaseConnectionByID(ctx, userID, connID)
+	if err != nil {
+    return c.JSON(http.StatusNotFound, echo.Map{"error": "connection not found", "details": err.Error()})
+	}
+
+	dsn := db.ConnectionURL.String
+	if !db.ConnectionURL.Valid {
+		dsn = pgx.BuildPostgresDSN(db.Username, db.Password, db.Host, strconv.Itoa(db.Port), db.DatabaseName, db.SSLEnabled)
+	}
+	pool, err := s.PgxPool.GetPool(ctx, connID, dsn)
+	if err != nil {
+    return c.JSON(http.StatusInternalServerError, echo.Map{"error": "pool error", "details": err.Error()})
+	}
+	rows, err := pool.Query(ctx, pgx.AllTables)
+	if err != nil {
+    return c.JSON(http.StatusInternalServerError, echo.Map{"error": "query error", "details":err.Error()})
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		rows.Scan(&name)
+		tables = append(tables, name)
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"id":     connID,
+		"driver": db.Engine,
+		"tables": tables,
+	})
+}
+
+func (s *Server) GetTableColumns(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	connID := c.Param("id")
+	table := c.Param("table")
+
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "not_authenticated"})
+	}
+
+	db, err := s.DB.GetDatabaseConnectionByID(ctx, userID, connID)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "connection not found", "details": err.Error()})
+	}
+
+	dsn := db.ConnectionURL.String
+	if !db.ConnectionURL.Valid {
+		dsn = pgx.BuildPostgresDSN(db.Username, db.Password, db.Host, strconv.Itoa(db.Port), db.DatabaseName, db.SSLEnabled)
+	}
+	pool, err := s.PgxPool.GetPool(ctx, connID, dsn)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "pool error", "details": err.Error()})
+	}
+sql, args := pgx.GetColumnType(table)
+rows, err := pool.Query(ctx, sql, args...)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "query error", "details": err.Error()})
+	}
+	defer rows.Close()
+	type ColumnInfo struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+
+	var result []ColumnInfo
+
+	for rows.Next() {
+		var col ColumnInfo
+		if err := rows.Scan(&col.Name, &col.Type); err != nil {
+			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "scan failed", "details": err.Error()})
+		}
+		result = append(result, col)
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"table":   table,
+		"columns": result,
+	})
 }

@@ -10,8 +10,9 @@ import (
 )
 
 func (s *Server) addConnectionEndPoint(g *echo.Group) {
-	conn := g.Group("/connections")
-	conn.GET("", s.listConnectionsHandler)
+	conns := g.Group("/connections")
+	conns.GET("", s.listConnectionsHandler)
+
 }
 
 func (s *Server) listConnectionsHandler(c echo.Context) error {
@@ -20,16 +21,22 @@ func (s *Server) listConnectionsHandler(c echo.Context) error {
 	if !ok || userID == "" {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "not_authenticated"})
 	}
+	totalCount := 0
 
-	air, err := s.db.GetAirtableConnection(ctx, userID)
+	airs, err := s.DB.GetAirtableConnections(ctx, userID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.JSON(http.StatusOK, echo.Map{})
 		}
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
+	if airs != nil {
+		totalCount++
+	}
+  // todo: update when we support more airtable
+  air := airs[0]
 
-	client := airtable.New(&s.db, air)
+	client := airtable.New(&s.DB, &air)
 	bases, err := client.GetBases(ctx)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, echo.Map{"error": "Failed to get base data from airtable", "details": err.Error()})
@@ -40,10 +47,12 @@ func (s *Server) listConnectionsHandler(c echo.Context) error {
 			base = b
 		}
 	}
-	dbs, err := s.db.GetDatabaseConnection(ctx, userID)
+	dbs, err := s.DB.GetDatabaseConnections(ctx, userID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "db_error", "details": err.Error()})
 	}
+
+	totalCount += len(dbs)
 
 	response := echo.Map{
 		"airtable": map[string]any{
@@ -67,6 +76,7 @@ func (s *Server) listConnectionsHandler(c echo.Context) error {
 			"ssl":        db.SSLEnabled,
 		}
 	}
+	response["total_connections"] = totalCount
 
 	return c.JSON(http.StatusOK, response)
 }

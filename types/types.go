@@ -27,8 +27,15 @@ type Base struct {
 }
 
 type Table struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Fields []Field `json:"fields"`
+}
+
+type Field struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 type DBConnectRequest struct {

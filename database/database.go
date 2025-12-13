@@ -16,15 +16,21 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
+const (
+	idAndUserId = "id = ? AND user_id = ?"
+)
+
 // Service represents a service that interacts with a database.
 type DB interface {
 	WithTx(fn func(tx DB) error) error
 	UpsertAirtableConnection(ctx context.Context, conn *models.AirtableConnection) error
-	GetAirtableConnection(ctx context.Context, userID string) (*models.AirtableConnection, error)
+	GetAirtableConnections(ctx context.Context, userID string) ([]models.AirtableConnection, error)
 	DeleteAirtableConnection(ctx context.Context, userID, id string) error
 	CreateDatabaseConnection(ctx context.Context, db *models.DatabaseConnection) error
 	DeleteDatabaseConnection(ctx context.Context, userID, id string) error
-	GetDatabaseConnection(ctx context.Context, userID string) ([]models.DatabaseConnection, error)
+	GetDatabaseConnections(ctx context.Context, userID string) ([]models.DatabaseConnection, error)
+	GetDatabaseConnectionByID(ctx context.Context, userID, id string) (*models.DatabaseConnection, error)
+	GetAirtableConnectionByID(ctx context.Context, userID, id string) (*models.AirtableConnection, error)
 }
 
 type service struct {
@@ -114,18 +120,18 @@ func (s *service) UpsertAirtableConnection(ctx context.Context, conn *models.Air
 		Error
 }
 
-func (s *service) GetAirtableConnection(ctx context.Context, userID string) (*models.AirtableConnection, error) {
-	var airtable models.AirtableConnection
+func (s *service) GetAirtableConnections(ctx context.Context, userID string) ([]models.AirtableConnection, error) {
+	var airtable []models.AirtableConnection
 	if err := s.db.WithContext(ctx).
 		Model(&models.AirtableConnection{}).
 		Where("user_id = ?", userID).
-		First(&airtable).Error; err != nil {
+		Find(&airtable).Error; err != nil {
 		return nil, err
 	}
-	return &airtable, nil
+	return airtable, nil
 }
 
-func (s *service) GetDatabaseConnection(ctx context.Context, userID string) ([]models.DatabaseConnection, error) {
+func (s *service) GetDatabaseConnections(ctx context.Context, userID string) ([]models.DatabaseConnection, error) {
 	var db []models.DatabaseConnection
 	if err := s.db.WithContext(ctx).
 		Model(&models.DatabaseConnection{}).
@@ -137,13 +143,40 @@ func (s *service) GetDatabaseConnection(ctx context.Context, userID string) ([]m
 }
 
 func (s *service) DeleteAirtableConnection(ctx context.Context, userID, id string) error {
-	return s.db.WithContext(ctx).Delete(&models.AirtableConnection{}, "id = ? AND user_id = ?", id, userID).Error
+	return s.db.WithContext(ctx).
+		Delete(&models.AirtableConnection{}, idAndUserId, id, userID).Error
 }
 
 func (s *service) CreateDatabaseConnection(ctx context.Context, db *models.DatabaseConnection) error {
-	return s.db.WithContext(ctx).Model(&models.DatabaseConnection{}).Create(db).Error
+	return s.db.WithContext(ctx).
+		Model(&models.DatabaseConnection{}).
+		Create(db).Error
 }
 
 func (s *service) DeleteDatabaseConnection(ctx context.Context, userID, id string) error {
-	return s.db.WithContext(ctx).Delete(&models.DatabaseConnection{}, "id = ? AND user_id = ?", id, userID).Error
+	return s.db.WithContext(ctx).
+		Delete(&models.DatabaseConnection{}, idAndUserId, id, userID).Error
+}
+
+func (s *service) GetDatabaseConnectionByID(ctx context.Context, userID, id string) (*models.DatabaseConnection, error) {
+	var db *models.DatabaseConnection
+	if err := s.db.WithContext(ctx).
+		Model(&models.DatabaseConnection{}).
+		Where(idAndUserId, id, userID).
+		First(&db).
+		Error; err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func (s *service) GetAirtableConnectionByID(ctx context.Context, userID, id string) (*models.AirtableConnection, error) {
+	var airtable models.AirtableConnection
+	if err := s.db.WithContext(ctx).
+		Model(&models.AirtableConnection{}).
+		Where(idAndUserId, id, userID).
+		First(&airtable).Error; err != nil {
+		return nil, err
+	}
+	return &airtable, nil
 }

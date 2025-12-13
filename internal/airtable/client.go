@@ -28,7 +28,8 @@ type Client interface {
 	OauthCallback(ctx context.Context, state, code string) (*models.AirtableConnection, error)
 	CheckApiKey(ctx context.Context, baseID, apiKey string) error
 	GetRedirectURL() string
-  SetAirtableConnection(conn *models.AirtableConnection)
+	SetAirtableConnection(conn *models.AirtableConnection)
+	GetTables(ctx context.Context) ([]types.Table, error)
 }
 
 type Airtable struct {
@@ -80,7 +81,7 @@ func (a *Airtable) GetRedirectURL() string {
 }
 
 func (a *Airtable) SetAirtableConnection(conn *models.AirtableConnection) {
-  a.Conn = conn
+	a.Conn = conn
 }
 
 func (a *Airtable) GetBases(ctx context.Context) ([]types.Base, error) {
@@ -91,6 +92,16 @@ func (a *Airtable) GetBases(ctx context.Context) ([]types.Base, error) {
 		return nil, err
 	}
 	return data.Bases, nil
+}
+func (a *Airtable) GetTables(ctx context.Context) ([]types.Table, error) {
+	var data struct {
+		Tables []types.Table `json:"tables"`
+	}
+	if err := a.doRequest(ctx, "GET", fmt.Sprintf(tableBase, a.Conn.BaseID), nil, &data); err != nil {
+		return nil, err
+	}
+
+	return data.Tables, nil
 }
 
 func (o *Airtable) OauthConnecter(userID string) (string, error) {

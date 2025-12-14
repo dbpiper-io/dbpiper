@@ -127,7 +127,7 @@ func (s *Server) getTables(c echo.Context) error {
 
 	db, err := s.DB.GetDatabaseConnectionByID(ctx, userID, connID)
 	if err != nil {
-    return c.JSON(http.StatusNotFound, echo.Map{"error": "connection not found", "details": err.Error()})
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "connection not found", "details": err.Error()})
 	}
 
 	dsn := db.ConnectionURL.String
@@ -136,11 +136,11 @@ func (s *Server) getTables(c echo.Context) error {
 	}
 	pool, err := s.PgxPool.GetPool(ctx, connID, dsn)
 	if err != nil {
-    return c.JSON(http.StatusInternalServerError, echo.Map{"error": "pool error", "details": err.Error()})
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "pool error", "details": err.Error()})
 	}
 	rows, err := pool.Query(ctx, pgx.AllTables)
 	if err != nil {
-    return c.JSON(http.StatusInternalServerError, echo.Map{"error": "query error", "details":err.Error()})
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "query error", "details": err.Error()})
 	}
 	defer rows.Close()
 
@@ -182,8 +182,7 @@ func (s *Server) GetTableColumns(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "pool error", "details": err.Error()})
 	}
-sql, args := pgx.GetColumnType(table)
-rows, err := pool.Query(ctx, sql, args...)
+	rows, err := pool.Query(ctx, pgx.ColumnType, table)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "query error", "details": err.Error()})
 	}

@@ -25,6 +25,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		s.addAirtableEndPoint(v1)
 		s.addDBConnectionEndPoint(v1)
 		s.addConnectionEndPoint(v1)
+		s.addSyncEndPoint(v1)
 	}
 
 	return e

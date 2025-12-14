@@ -1,54 +1,71 @@
 package models
 
 import (
-	"gorm.io/datatypes"
+	"database/sql"
 	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/datatypes"
+)
+
+type SyncDirection string
+
+const (
+	AirtableToPg  SyncDirection = "airtable_to_pgx"
+	PgToAirtable  SyncDirection = "pgx_to_airtable"
+	Bidirectional SyncDirection = "two_way"
+)
+
+type SyncStatus string
+type RepoType string
+
+const (
+	SyncSetup      SyncStatus = "setup"
+	SyncInstalling SyncStatus = "installing"
+	SyncActive     SyncStatus = "active"
+	SyncPaused     SyncStatus = "paused"
+	SyncError      SyncStatus = "error"
+)
+
+const (
+	Pgx      RepoType = "pgx"
+	Airtable RepoType = "airtable"
 )
 
 type Sync struct {
-	ID     string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	UserID int    `gorm:"index"`
-	User   User   `gorm:"constraint:OnDelete:CASCADE"`
+	ID     uuid.UUID `gorm:"type:uuid;primaryKey"`
+	UserID string    `gorm:"index;not null"`
 
-	AirtableConnectionID int
-	AirtableConnection   AirtableConnection `gorm:"constraint:OnDelete:SET NULL"`
+	// Source
+	SourceType   RepoType // "airtable" | "postgres"
+	SourceConnID string
 
-	DatabaseConnectionID int
-	DatabaseConnection   DatabaseConnection `gorm:"constraint:OnDelete:SET NULL"`
+	// Target
+	TargetType   RepoType // "airtable" | "postgres"
+	TargetConnID string
 
-	AirtableBaseID    string
-	AirtableTableID   string
-	AirtableTableName string
-	AirtableWebhookID string
+	// Direction
+	Direction SyncDirection // "one_way" | "two_way"
 
-	DatabaseTableName        string
-	DatabaseTriggerInstalled bool
+	Tables datatypes.JSON
+	/*
+	  [
+	    {
+	      "source_table": "users",
+	      "target_table": "tblAbc123",
+	      "fields": {
+	        "id": "fldID",
+	        "email": "fldEmail"
+	      }
+	    }
+	  ]
+	*/
 
-	FieldMappings datatypes.JSON // JSONB {"pg_col": "airtable_field"}
+	// State
+	Status SyncStatus // setup | active | paused | error
 
-	SyncDirection      string // db_to_airtable, airtable_to_db, bidirectional
-	ConflictResolution string `gorm:"default:last_write_wins"`
+	LastError sql.NullString
 
-	IsActive     bool       `gorm:"default:true"`
-	LastSyncedAt *time.Time // nullable
-	Status       string     `gorm:"default:active"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime"`
-}
-
-type SyncLog struct {
-	ID     int    `gorm:"primaryKey"`
-	SyncID string `gorm:"type:uuid;index"`
-	Sync   Sync   `gorm:"constraint:OnDelete:CASCADE"`
-
-	Direction      string // airtable_to_db, db_to_airtable
-	Status         string // success, error, conflict
-	RecordsAdded   int
-	RecordsUpdated int
-	RecordsDeleted int
-
-	ErrorMessage    string
-	ExecutionTimeMs int
-	SyncedAt        time.Time `gorm:"autoCreateTime"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

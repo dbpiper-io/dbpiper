@@ -24,7 +24,6 @@ func (s *Server) addAirtableEndPoint(g *echo.Group) {
 
 	apikey := airtables.Group("/apikey")
 	apikey.POST("/connect", s.apiKeyConnecter)
-
 }
 
 func (s *Server) connectHandler(c echo.Context) error {
@@ -86,6 +85,7 @@ func (s *Server) apiKeyConnecter(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{
 			"error": "Invalid request body",
+      "details": err.Error(),
 		})
 	}
 
@@ -98,6 +98,7 @@ func (s *Server) apiKeyConnecter(c echo.Context) error {
 	if err := air.CheckApiKey(ctx, req.BaseID, req.APIKey); err != nil {
 		return c.JSON(http.StatusBadGateway, echo.Map{
 			"error": "Invalid API key or base ID",
+      "details": err.Error(),
 		})
 	}
 	conn := models.AirtableConnection{

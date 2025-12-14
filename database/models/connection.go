@@ -15,8 +15,6 @@ const (
 
 const (
 	Postgres Engine = "pgx"
-	Mysql    Engine = "mysql"
-	Mongodb  Engine = "mongodb"
 )
 
 type AirtableConnection struct {

@@ -1,5 +1,9 @@
 package types
 
+import (
+	"dbpiper/database/models"
+)
+
 type APIKeyConnectRequest struct {
 	APIKey string `json:"api_key"`
 	BaseID string `json:"base_id"`
@@ -49,4 +53,24 @@ type DBConnectRequest struct {
 	Password string `json:"password"`
 
 	UseSSL bool `json:"use_ssl"`
+}
+
+type CreateSyncRequest struct {
+	Source SyncEndpoint `json:"source"`
+	Target SyncEndpoint `json:"target"`
+
+	Direction string `json:"direction"` // one_way | two_way
+	Tables    []TableConfig        `json:"tables"`
+}
+
+type SyncEndpoint struct {
+	Type         models.RepoType `json:"type"` // pgx | airtable
+	ConnectionID string          `json:"connection_id"`
+}
+
+type TableConfig struct {
+	SourceTable string            `json:"source_table"`
+	TargetTable string            `json:"target_table"`
+	Fields      map[string]string `json:"fields"`
+	// source_column -> target_field_id
 }

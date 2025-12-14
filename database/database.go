@@ -31,6 +31,7 @@ type DB interface {
 	GetDatabaseConnections(ctx context.Context, userID string) ([]models.DatabaseConnection, error)
 	GetDatabaseConnectionByID(ctx context.Context, userID, id string) (*models.DatabaseConnection, error)
 	GetAirtableConnectionByID(ctx context.Context, userID, id string) (*models.AirtableConnection, error)
+	CreateSync(ctx context.Context, sync *models.Sync) error
 }
 
 type service struct {
@@ -61,6 +62,7 @@ func New() DB {
 	err = db.AutoMigrate(
 		&models.AirtableConnection{},
 		&models.DatabaseConnection{},
+		&models.Sync{},
 	)
 
 	if err != nil {
@@ -155,7 +157,8 @@ func (s *service) CreateDatabaseConnection(ctx context.Context, db *models.Datab
 
 func (s *service) DeleteDatabaseConnection(ctx context.Context, userID, id string) error {
 	return s.db.WithContext(ctx).
-		Delete(&models.DatabaseConnection{}, idAndUserId, id, userID).Error
+		Delete(&models.DatabaseConnection{}, idAndUserId, id, userID).
+		Error
 }
 
 func (s *service) GetDatabaseConnectionByID(ctx context.Context, userID, id string) (*models.DatabaseConnection, error) {
@@ -179,4 +182,10 @@ func (s *service) GetAirtableConnectionByID(ctx context.Context, userID, id stri
 		return nil, err
 	}
 	return &airtable, nil
+}
+
+func (s *service) CreateSync(ctx context.Context, sync *models.Sync) error {
+	return s.db.WithContext(ctx).
+		Model(&models.Sync{}).
+		Create(sync).Error
 }
